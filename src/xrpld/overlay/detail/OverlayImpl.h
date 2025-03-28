@@ -427,6 +427,13 @@ public:
         Peer::id_t peer,
         protocol::MessageType type);
 
+    void
+    updateUntrustedSlotAndSquelch(
+        uint256 const& key,
+        PublicKey const& validator,
+        Peer::id_t peer,
+        protocol::MessageType type);
+
     /** Called when the peer is deleted. If the peer was selected to be the
      * source of messages from the validator then squelched peers have to be
      * unsquelched.

@@ -35,7 +35,6 @@
 #include <algorithm>
 #include <chrono>
 #include <ctime>
-#include <memory>
 #include <optional>
 #include <set>
 #include <tuple>
@@ -637,6 +636,13 @@ public:
         id_t id,
         protocol::MessageType type,
         bool isTrusted);
+
+    bool
+    updateUntrustedSlotAndSquelch(
+        uint256 const& key,
+        PublicKey const& validator,
+        id_t id,
+        protocol::MessageType type);
 
     bool
     updateUntrustedSlotAndSquelch(

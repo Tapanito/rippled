@@ -2340,13 +2340,30 @@ PeerImp::onMessage(std::shared_ptr<protocol::TMValidation> const& m)
             return;
         }
 
+        auto key = sha512Half(makeSlice(m->validation()));
+
         // RH TODO: when isTrusted = false we should probably also cache a key
         // suppression for 30 seconds to avoid doing a relatively expensive
         // lookup every time a spam packet is received
         auto const isTrusted =
             app_.validators().trusted(val->getSignerPublic());
 
-        auto const key = sha512Half(makeSlice(m->validation()));
+        // If the operator has specified that untrusted validations be
+        // dropped then this happens here I.e. before further wasting CPU
+        // verifying the signature of an untrusted key
+        if (!isTrusted)
+        {
+            // increase untrusted validations received
+            overlay_.reportInboundTraffic(
+                TrafficCount::category::validation_untrusted,
+                Message::messageSize(*m));
+
+            if (app_.config().RELAY_UNTRUSTED_VALIDATIONS == -1)
+                return;
+        }
+
+        auto key = sha512Half(makeSlice(m->validation()));
+
         auto [added, relayed] =
             app_.getHashRouter().addSuppressionPeerWithStatus(key, id_);
 
