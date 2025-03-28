@@ -32,7 +32,6 @@
 #include <xrpl/protocol/messages.h>
 
 #include <algorithm>
-#include <memory>
 #include <optional>
 #include <set>
 #include <tuple>
@@ -551,7 +550,9 @@ public:
         : handler_(handler), logs_(logs), journal_(logs.journal("Slots"))
     {
     }
+
     ~Slots() = default;
+
     /** Calls Slot::update of Slot associated with the validator.
      * @param key Message's hash
      * @param validator Validator's public key
@@ -560,6 +561,13 @@ public:
      */
     void
     updateSlotAndSquelch(
+        uint256 const& key,
+        PublicKey const& validator,
+        id_t id,
+        protocol::MessageType type);
+
+    bool
+    updateUntrustedSlotAndSquelch(
         uint256 const& key,
         PublicKey const& validator,
         id_t id,
@@ -652,6 +660,8 @@ private:
     addPeerMessage(uint256 const& key, id_t id);
 
     hash_map<PublicKey, Slot<clock_type>> slots_;
+    hash_map<PublicKey, Slot<clock_type>> untrusted_slots_;
+
     SquelchHandler const& handler_;  // squelch/unsquelch handler
     Logs& logs_;
     beast::Journal const journal_;
@@ -721,6 +731,44 @@ Slots<clock_type>::updateSlotAndSquelch(
     }
     else
         it->second.update(validator, id, type);
+}
+
+template <typename clock_type>
+bool
+Slots<clock_type>::updateUntrustedSlotAndSquelch(
+    uint256 const& key,
+    PublicKey const& validator,
+    id_t id,
+    protocol::MessageType type)
+{
+    if (!addPeerMessage(key, id))
+        return false;
+
+    if (auto const& it = untrusted_slots_.find(validator);
+        it != untrusted_slots_.end())
+    {
+        it->second.update(validator, id, type);
+        return true;
+    }
+
+    // if we are at capacity, there's nothing to do
+    // the problem now is that we do not track
+    // when we sent the last squelch message to this peer
+    if (untrusted_slots_.size() == MAX_UNTRUSTED_SLOTS)
+    {
+        handler_.squelch(validator, id, MAX_UNSQUELCH_EXPIRE_DEFAULT.count());
+        return false;
+    }
+
+    auto it =
+        untrusted_slots_
+            .emplace(std::make_pair(
+                validator,
+                Slot<clock_type>(handler_, logs_.journal("SlotUntrusted"))))
+            .first;
+    it->second.update(validator, id, type);
+
+    return true;
 }
 
 template <typename clock_type>
