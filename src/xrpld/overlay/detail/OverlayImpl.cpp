@@ -17,6 +17,8 @@
 */
 //==============================================================================
 
+#include "xrpld/overlay/detail/OverlayImpl.h"
+
 #include <xrpld/app/misc/HashRouter.h>
 #include <xrpld/app/misc/NetworkOPs.h>
 #include <xrpld/app/misc/ValidatorList.h>
@@ -1441,6 +1443,21 @@ OverlayImpl::updateSlotAndSquelch(
         });
 
     slots_.updateSlotAndSquelch(key, validator, peer, type);
+}
+
+void
+OverlayImpl::updateUntrustedSlotAndSquelch(
+    uint256 const& key,
+    PublicKey const& validator,
+    Peer::id_t peer,
+    protocol::MessageType type)
+{
+    if (!strand_.running_in_this_thread())
+        return post(strand_, [this, key, validator, peer, type]() {
+            updateUntrustedSlotAndSquelch(key, validator, peer, type);
+        });
+
+    slots_.updateUntrustedSlotAndSquelch(key, validator, peer, type);
 }
 
 void

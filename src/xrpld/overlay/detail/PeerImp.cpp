@@ -2336,26 +2336,13 @@ PeerImp::onMessage(std::shared_ptr<protocol::TMValidation> const& m)
             return;
         }
 
+        auto key = sha512Half(makeSlice(m->validation()));
+
         // RH TODO: when isTrusted = false we should probably also cache a key
         // suppression for 30 seconds to avoid doing a relatively expensive
         // lookup every time a spam packet is received
         auto const isTrusted =
             app_.validators().trusted(val->getSignerPublic());
-
-        // If the operator has specified that untrusted validations be
-        // dropped then this happens here I.e. before further wasting CPU
-        // verifying the signature of an untrusted key
-        if (!isTrusted)
-        {
-            overlay_.reportInboundTraffic(
-                TrafficCount::category::validation_untrusted,
-                Message::messageSize(*m));
-
-            if (app_.config().RELAY_UNTRUSTED_VALIDATIONS == -1)
-                return;
-        }
-
-        auto key = sha512Half(makeSlice(m->validation()));
 
         auto [added, relayed] =
             app_.getHashRouter().addSuppressionPeerWithStatus(key, id_);
@@ -2366,10 +2353,14 @@ PeerImp::onMessage(std::shared_ptr<protocol::TMValidation> const& m)
             // peer receives within IDLED seconds since the message has been
             // relayed. Wait WAIT_ON_BOOTUP time to let the server establish
             // connections to peers.
-            if (reduceRelayReady() && relayed &&
-                (stopwatch().now() - *relayed) < reduce_relay::IDLED)
-                overlay_.updateSlotAndSquelch(
-                    key, val->getSignerPublic(), id_, protocol::mtVALIDATION);
+            if (isTrusted)
+                if (reduceRelayReady() && relayed &&
+                    (stopwatch().now() - *relayed) < reduce_relay::IDLED)
+                    overlay_.updateSlotAndSquelch(
+                        key,
+                        val->getSignerPublic(),
+                        id_,
+                        protocol::mtVALIDATION);
 
             overlay_.reportInboundTraffic(
                 TrafficCount::category::validation_duplicate,
@@ -2377,6 +2368,22 @@ PeerImp::onMessage(std::shared_ptr<protocol::TMValidation> const& m)
 
             JLOG(p_journal_.trace()) << "Validation: duplicate";
             return;
+        }
+
+        // If the operator has specified that untrusted validations be
+        // dropped then this happens here I.e. before further wasting CPU
+        // verifying the signature of an untrusted key
+        if (!isTrusted)
+        {
+            overlay_.reportInboundTraffic(
+                TrafficCount::category::validation_untrusted,
+                Message::messageSize(*m));
+
+            overlay_.updateUntrustedSlotAndSquelch(
+                key, val->getSignerPublic(), id_, protocol::mtVALIDATION);
+
+            if (app_.config().RELAY_UNTRUSTED_VALIDATIONS == -1)
+                return;
         }
 
         if (!isTrusted && (tracking_.load() == Tracking::diverged))
