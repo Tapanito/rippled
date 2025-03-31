@@ -1684,20 +1684,6 @@ PeerImp::onMessage(std::shared_ptr<protocol::TMProposeSet> const& m)
     // suppression for 30 seconds to avoid doing a relatively expensive lookup
     // every time a spam packet is received
     PublicKey const publicKey{makeSlice(set.nodepubkey())};
-    auto const isTrusted = app_.validators().trusted(publicKey);
-
-    // If the operator has specified that untrusted proposals be dropped then
-    // this happens here I.e. before further wasting CPU verifying the signature
-    // of an untrusted key
-    if (!isTrusted)
-    {
-        overlay_.reportInboundTraffic(
-            TrafficCount::category::proposal_untrusted,
-            Message::messageSize(*m));
-
-        if (app_.config().RELAY_UNTRUSTED_PROPOSALS == -1)
-            return;
-    }
 
     uint256 const proposeHash{set.currenttxhash()};
     uint256 const prevLedger{set.previousledger()};
@@ -1712,7 +1698,7 @@ PeerImp::onMessage(std::shared_ptr<protocol::TMProposeSet> const& m)
         publicKey.slice(),
         sig);
 
-    if (auto [added, relayed] =
+    if (auto const& [added, relayed] =
             app_.getHashRouter().addSuppressionPeerWithStatus(suppression, id_);
         !added)
     {
@@ -1732,8 +1718,20 @@ PeerImp::onMessage(std::shared_ptr<protocol::TMProposeSet> const& m)
         return;
     }
 
+    auto const isTrusted = app_.validators().trusted(publicKey);
+
+    // If the operator has specified that untrusted proposals be dropped then
+    // this happens here I.e. before further wasting CPU verifying the signature
+    // of an untrusted key
     if (!isTrusted)
     {
+        overlay_.reportInboundTraffic(
+            TrafficCount::category::proposal_untrusted,
+            Message::messageSize(*m));
+
+        if (app_.config().RELAY_UNTRUSTED_PROPOSALS == -1)
+            return;
+
         if (tracking_.load() == Tracking::diverged)
         {
             JLOG(p_journal_.debug())
@@ -2336,14 +2334,13 @@ PeerImp::onMessage(std::shared_ptr<protocol::TMValidation> const& m)
             return;
         }
 
-        auto key = sha512Half(makeSlice(m->validation()));
-
         // RH TODO: when isTrusted = false we should probably also cache a key
         // suppression for 30 seconds to avoid doing a relatively expensive
         // lookup every time a spam packet is received
         auto const isTrusted =
             app_.validators().trusted(val->getSignerPublic());
 
+        auto const key = sha512Half(makeSlice(m->validation()));
         auto [added, relayed] =
             app_.getHashRouter().addSuppressionPeerWithStatus(key, id_);
 
