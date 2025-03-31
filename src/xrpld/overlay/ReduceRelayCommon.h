@@ -50,7 +50,7 @@ static constexpr uint16_t MAX_MESSAGE_THRESHOLD = 20;
 // Max selected peers to choose as the source of messages from validator
 static constexpr uint16_t MAX_SELECTED_PEERS = 5;
 // Max number of untrusted slots the server will maintain
-static constexpr uint16_t MAX_UNTRUSTED_SLOTS = 10;
+static constexpr uint16_t MAX_UNTRUSTED_SLOTS = 5;
 // Wait before reduce-relay feature is enabled on boot up to let
 // the server establish peer connections
 static constexpr auto WAIT_ON_BOOTUP = std::chrono::minutes{10};
