@@ -1024,12 +1024,13 @@ PeerImp::onMessageBegin(
 
     auto const category = TrafficCount::categorize(
         *m, static_cast<protocol::MessageType>(type), true);
-    // report specific category traffic
-    overlay_.reportInboundTraffic(category, static_cast<int>(size));
 
     // report total incoming traffic
     overlay_.reportInboundTraffic(
         TrafficCount::category::total, static_cast<int>(size));
+
+    // increase the traffic received for a specific category
+    overlay_.reportInboundTraffic(category, static_cast<int>(size));
 
     using namespace protocol;
     if ((type == MessageType::mtTRANSACTION ||
@@ -1715,6 +1716,7 @@ PeerImp::onMessage(std::shared_ptr<protocol::TMProposeSet> const& m)
                 protocol::mtPROPOSE_LEDGER,
                 isTrusted);
 
+        // report duplicate proposal messages
         overlay_.reportInboundTraffic(
             TrafficCount::category::proposal_duplicate,
             Message::messageSize(*m));
@@ -2363,6 +2365,7 @@ PeerImp::onMessage(std::shared_ptr<protocol::TMValidation> const& m)
                     protocol::mtVALIDATION,
                     isTrusted);
 
+            // increase duplicate validations received
             overlay_.reportInboundTraffic(
                 TrafficCount::category::validation_duplicate,
                 Message::messageSize(*m));
