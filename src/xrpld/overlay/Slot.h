@@ -224,10 +224,11 @@ private:
     /** Data maintained for each peer */
     struct PeerInfo
     {
-        PeerState state;         // peer's state
-        std::size_t count;       // message count
-        time_point expire;       // squelch expiration time
-        time_point lastMessage;  // time last message received
+        PeerState state;            // peer's state
+        std::size_t count;          // message count
+        time_point expire;          // squelch expiration time
+        time_point lastMessage;     // time last message received
+        std::size_t timesSelected;  // number of times the peer was selected
     };
     std::unordered_map<id_t, PeerInfo> peers_;  // peer's data
     // pool of peers considered as the source of messages
@@ -280,8 +281,14 @@ Slot<clock_type>::update(
     {
         JLOG(journal_.trace())
             << "update: adding peer " << Slice(validator) << " " << id;
-        peers_.emplace(
-            std::make_pair(id, PeerInfo{PeerState::Counting, 0, now, now}));
+        peers_.emplace(std::make_pair(
+            id,
+            PeerInfo{
+                .state = PeerState::Counting,
+                .count = 0,
+                .expire = now,
+                .lastMessage = now,
+                .timesSelected = 0}));
         initCounting();
         return;
     }
@@ -381,7 +388,11 @@ Slot<clock_type>::update(
             v.count = 0;
 
             if (selected.find(k) != selected.end())
+            {
                 v.state = PeerState::Selected;
+                ++v.timesSelected;
+            }
+
             else if (v.state != PeerState::Squelched)
             {
                 if (journal_.trace())
@@ -561,10 +572,10 @@ Slot<clock_type>::onWrite(beast::PropertyStream::Map& stream) const
         item["id"] = id;
         item["count"] = info.count;
         item["expire"] =
-            duration_cast<std::chrono::seconds>(now - info.expire).count();
+            duration_cast<std::chrono::seconds>(info.expire - now).count();
         item["lastMessage"] =
             duration_cast<std::chrono::seconds>(now - info.lastMessage).count();
-
+        item["timesSelected"] = info.timesSelected;
         switch (info.state)
         {
             case PeerState::Counting:
