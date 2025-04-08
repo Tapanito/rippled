@@ -28,10 +28,14 @@
 #include <xrpl/basics/random.h>
 #include <xrpl/beast/container/aged_unordered_map.h>
 #include <xrpl/beast/utility/Journal.h>
+#include <xrpl/beast/utility/PropertyStream.h>
 #include <xrpl/protocol/PublicKey.h>
 #include <xrpl/protocol/messages.h>
 
 #include <algorithm>
+#include <chrono>
+#include <ctime>
+#include <memory>
 #include <optional>
 #include <set>
 #include <tuple>
@@ -204,6 +208,9 @@ private:
      */
     std::chrono::seconds
     getSquelchDuration(std::size_t npeers);
+
+    void
+    onWrite(beast::PropertyStream::Map& stream) const;
 
 private:
     /** Reset counts of peers in Selected or Counting state */
@@ -526,6 +533,55 @@ Slot<clock_type>::getPeers() const
     return r;
 }
 
+template <typename clock_type>
+void
+Slot<clock_type>::onWrite(beast::PropertyStream::Map& stream) const
+{
+    auto const now = clock_type::now();
+    switch (state_)
+    {
+        case SlotState::Counting:
+            stream["state"] = "counting";
+            break;
+        case SlotState::Selected:
+            stream["state"] = "selected";
+            break;
+        default:
+            stream["state"] = "unknown";
+    }
+    stream["reachedThreshold"] = reachedThreshold_;
+    stream["considered"] = considered_.size();
+    stream["lastSelected"] =
+        duration_cast<std::chrono::seconds>(now - lastSelected_).count();
+    beast::PropertyStream::Set peers("peers", stream);
+
+    for (auto const& [id, info] : peers_)
+    {
+        beast::PropertyStream::Map item(peers);
+        item["id"] = id;
+        item["count"] = info.count;
+        item["expire"] =
+            duration_cast<std::chrono::seconds>(now - info.expire).count();
+        item["lastMessage"] =
+            duration_cast<std::chrono::seconds>(now - info.lastMessage).count();
+
+        switch (info.state)
+        {
+            case PeerState::Counting:
+                item["state"] = "counting";
+                break;
+            case PeerState::Selected:
+                item["state"] = "selected";
+                break;
+            case PeerState::Squelched:
+                item["state"] = "squelched";
+                break;
+            default:
+                item["state"] = "unknown";
+        }
+    }
+}
+
 /** Slots is a container for validator's Slot and handles Slot update
  * when a message is received from a validator. It also handles Slot aging
  * and checks for peers which are disconnected or stopped relaying the messages.
@@ -651,6 +707,9 @@ public:
      */
     void
     deletePeer(id_t id, bool erase);
+
+    void
+    onWrite(beast::PropertyStream::Map& stream);
 
 private:
     /** Add message/peer if have not seen this message
@@ -796,6 +855,19 @@ Slots<clock_type>::deleteIdlePeers()
         }
         else
             ++it;
+    }
+}
+
+template <typename clock_type>
+void
+Slots<clock_type>::onWrite(beast::PropertyStream::Map& stream)
+{
+    beast::PropertyStream::Set set("slots", stream);
+    for (auto const& [validator, slot] : slots_)
+    {
+        beast::PropertyStream::Map item(set);
+        item["validator"] = toBase58(TokenType::NodePublic, validator);
+        slot.onWrite(item);
     }
 }
 
