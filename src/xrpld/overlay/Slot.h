@@ -116,10 +116,11 @@ private:
      * @param journal Journal for logging
      * @param handler Squelch/Unsquelch implementation
      */
-    Slot(SquelchHandler const& handler, beast::Journal journal)
+    Slot(SquelchHandler const& handler, beast::Journal journal, bool isTrusted)
         : reachedThreshold_(0)
         , lastSelected_(clock_type::now())
         , state_(SlotState::Counting)
+        , isTrusted_(isTrusted)
         , handler_(handler)
         , journal_(journal)
     {
@@ -239,6 +240,7 @@ private:
     // last time peers were selected, used to age the slot
     typename clock_type::time_point lastSelected_;
     SlotState state_;                // slot's state
+    bool isTrusted_;                 // is the slot for a trusted validator
     SquelchHandler const& handler_;  // squelch/unsquelch handler
     beast::Journal const journal_;   // logging
 };
@@ -564,6 +566,8 @@ Slot<clock_type>::onWrite(beast::PropertyStream::Map& stream) const
     stream["considered"] = considered_.size();
     stream["lastSelected"] =
         duration_cast<std::chrono::seconds>(now - lastSelected_).count();
+    stream["isTrusted"] = isTrusted_;
+
     beast::PropertyStream::Set peers("peers", stream);
 
     for (auto const& [id, info] : peers_)
@@ -631,7 +635,8 @@ public:
         uint256 const& key,
         PublicKey const& validator,
         id_t id,
-        protocol::MessageType type);
+        protocol::MessageType type,
+        bool isTrusted);
 
     bool
     updateUntrustedSlotAndSquelch(
@@ -782,7 +787,8 @@ Slots<clock_type>::updateSlotAndSquelch(
     uint256 const& key,
     PublicKey const& validator,
     id_t id,
-    protocol::MessageType type)
+    protocol::MessageType type,
+    bool isTrusted)
 {
     if (!addPeerMessage(key, id))
         return;
@@ -795,7 +801,8 @@ Slots<clock_type>::updateSlotAndSquelch(
         auto it = slots_
                       .emplace(std::make_pair(
                           validator,
-                          Slot<clock_type>(handler_, logs_.journal("Slot"))))
+                          Slot<clock_type>(
+                              handler_, logs_.journal("Slot"), isTrusted)))
                       .first;
         it->second.update(validator, id, type);
     }
@@ -830,12 +837,11 @@ Slots<clock_type>::updateUntrustedSlotAndSquelch(
         return false;
     }
 
-    auto it =
-        untrusted_slots_
-            .emplace(std::make_pair(
-                validator,
-                Slot<clock_type>(handler_, logs_.journal("SlotUntrusted"))))
-            .first;
+    auto it = untrusted_slots_
+                  .emplace(std::make_pair(
+                      validator,
+                      Slot<clock_type>(handler_, logs_.journal("Slot"), false)))
+                  .first;
     it->second.update(validator, id, type);
 
     return true;

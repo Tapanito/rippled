@@ -547,7 +547,7 @@ public:
         protocol::MessageType type = protocol::mtVALIDATION) override
     {
         squelch_ = f;
-        slots_.updateSlotAndSquelch(key, validator, id, type);
+        slots_.updateSlotAndSquelch(key, validator, id, type, true);
     }
 
     void
@@ -1442,7 +1442,8 @@ vp_squelched=1
                             message,
                             validator,
                             peer,
-                            protocol::MessageType::mtVALIDATION);
+                            protocol::MessageType::mtVALIDATION,
+                            true);
                     }
                 }
                 // make Slot's internal hash router expire all messages

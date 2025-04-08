@@ -1698,6 +1698,8 @@ PeerImp::onMessage(std::shared_ptr<protocol::TMProposeSet> const& m)
         publicKey.slice(),
         sig);
 
+    auto const isTrusted = app_.validators().trusted(publicKey);
+
     if (auto const& [added, relayed] =
             app_.getHashRouter().addSuppressionPeerWithStatus(suppression, id_);
         !added)
@@ -1707,7 +1709,11 @@ PeerImp::onMessage(std::shared_ptr<protocol::TMProposeSet> const& m)
         if (reduceRelayReady() && relayed &&
             (stopwatch().now() - *relayed) < reduce_relay::IDLED)
             overlay_.updateSlotAndSquelch(
-                suppression, publicKey, id_, protocol::mtPROPOSE_LEDGER);
+                suppression,
+                publicKey,
+                id_,
+                protocol::mtPROPOSE_LEDGER,
+                isTrusted);
 
         overlay_.reportInboundTraffic(
             TrafficCount::category::proposal_duplicate,
@@ -1717,8 +1723,6 @@ PeerImp::onMessage(std::shared_ptr<protocol::TMProposeSet> const& m)
 
         return;
     }
-
-    auto const isTrusted = app_.validators().trusted(publicKey);
 
     // If the operator has specified that untrusted proposals be dropped then
     // this happens here I.e. before further wasting CPU verifying the signature
@@ -2350,14 +2354,14 @@ PeerImp::onMessage(std::shared_ptr<protocol::TMValidation> const& m)
             // peer receives within IDLED seconds since the message has been
             // relayed. Wait WAIT_ON_BOOTUP time to let the server establish
             // connections to peers.
-            if (isTrusted)
-                if (reduceRelayReady() && relayed &&
-                    (stopwatch().now() - *relayed) < reduce_relay::IDLED)
-                    overlay_.updateSlotAndSquelch(
-                        key,
-                        val->getSignerPublic(),
-                        id_,
-                        protocol::mtVALIDATION);
+            if (reduceRelayReady() && relayed &&
+                (stopwatch().now() - *relayed) < reduce_relay::IDLED)
+                overlay_.updateSlotAndSquelch(
+                    key,
+                    val->getSignerPublic(),
+                    id_,
+                    protocol::mtVALIDATION,
+                    isTrusted);
 
             overlay_.reportInboundTraffic(
                 TrafficCount::category::validation_duplicate,
@@ -2984,7 +2988,8 @@ PeerImp::checkPropose(
                 peerPos.suppressionID(),
                 peerPos.publicKey(),
                 std::move(haveMessage),
-                protocol::mtPROPOSE_LEDGER);
+                protocol::mtPROPOSE_LEDGER,
+                isTrusted);
     }
 }
 
@@ -3020,7 +3025,8 @@ PeerImp::checkValidation(
                     key,
                     val->getSignerPublic(),
                     std::move(haveMessage),
-                    protocol::mtVALIDATION);
+                    protocol::mtVALIDATION,
+                    val->isTrusted());
             }
         }
     }

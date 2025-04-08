@@ -1428,17 +1428,24 @@ OverlayImpl::updateSlotAndSquelch(
     uint256 const& key,
     PublicKey const& validator,
     std::set<Peer::id_t>&& peers,
-    protocol::MessageType type)
+    protocol::MessageType type,
+    bool isTrusted)
 {
     if (!strand_.running_in_this_thread())
         return post(
             strand_,
-            [this, key, validator, peers = std::move(peers), type]() mutable {
-                updateSlotAndSquelch(key, validator, std::move(peers), type);
+            [this,
+             key,
+             validator,
+             peers = std::move(peers),
+             type,
+             isTrusted]() mutable {
+                updateSlotAndSquelch(
+                    key, validator, std::move(peers), type, isTrusted);
             });
 
     for (auto id : peers)
-        slots_.updateSlotAndSquelch(key, validator, id, type);
+        slots_.updateSlotAndSquelch(key, validator, id, type, isTrusted);
 }
 
 void
@@ -1446,14 +1453,15 @@ OverlayImpl::updateSlotAndSquelch(
     uint256 const& key,
     PublicKey const& validator,
     Peer::id_t peer,
-    protocol::MessageType type)
+    protocol::MessageType type,
+    bool isTrusted)
 {
     if (!strand_.running_in_this_thread())
-        return post(strand_, [this, key, validator, peer, type]() {
-            updateSlotAndSquelch(key, validator, peer, type);
+        return post(strand_, [this, key, validator, peer, type, isTrusted]() {
+            updateSlotAndSquelch(key, validator, peer, type, isTrusted);
         });
 
-    slots_.updateSlotAndSquelch(key, validator, peer, type);
+    slots_.updateSlotAndSquelch(key, validator, peer, type, isTrusted);
 }
 
 void
