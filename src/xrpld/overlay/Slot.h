@@ -644,13 +644,6 @@ public:
         id_t id,
         protocol::MessageType type);
 
-    bool
-    updateUntrustedSlotAndSquelch(
-        uint256 const& key,
-        PublicKey const& validator,
-        id_t id,
-        protocol::MessageType type);
-
     /** Check if peers stopped relaying messages
      * and if slots stopped receiving messages from the validator.
      */
