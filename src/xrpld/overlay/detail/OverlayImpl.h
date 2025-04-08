@@ -583,7 +583,7 @@ private:
             , messagesOut(collector->make_gauge(name, "Messages_Out"))
         {
         }
-        std::string name;
+        std::string const name;
         beast::insight::Gauge bytesIn;
         beast::insight::Gauge bytesOut;
         beast::insight::Gauge messagesIn;
